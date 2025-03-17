@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+    branches: [ main ]
 
 jobs:
   build:
@@ -44,14 +45,15 @@ jobs:
     - name: Install Windows Dependencies
       if: runner.os == 'Windows'
       run: |
-        choco install opencv
-        echo "OpenCV_DIR=C:\tools\opencv\build" >> $GITHUB_ENV
+        curl -L -o opencv-4.11.0-windows.exe https://github.com/opencv/opencv/releases/download/4.11.0/opencv-4.11.0-windows.exe
+        ls
+        ./opencv-4.11.0-windows.exe /D=C:\opencv
+        ./opencv-4.11.0-windows.exe
+        tree opencv
 
     - name: Install MacOS Dependencies
       if: runner.os == 'macOS'
-      run: |
-        sudo port install opencv4
-        echo "OpenCV_DIR=/opt/local/lib/cmake/opencv4" >> $GITHUB_ENV
+      run: brew install opencv
 
     - name: Configure project
       run: cmake -S . -B build ${{matrix.platform.flags}} ${{matrix.config.flags}} ${{matrix.build.flags}}
