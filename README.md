@@ -1,5 +1,7 @@
 # Basic OpenCV CMake Template
 
+[![build](https://github.com/mrdcvlsc/cmake-template-opencv/actions/workflows/build.yml/badge.svg)](https://github.com/mrdcvlsc/cmake-template-opencv/actions/workflows/build.yml)
+
 ## Install Requirements
 
 - For Ubuntu
