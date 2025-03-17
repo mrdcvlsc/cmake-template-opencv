@@ -34,20 +34,24 @@ jobs:
 
     steps:
 
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
     - name: Install Linux Dependencies
       if: runner.os == 'Linux'
       run: sudo apt install libopencv-dev
 
     - name: Install Windows Dependencies
       if: runner.os == 'Windows'
-      run: choco install opencv
+      run: |
+        choco install opencv
+        echo "OpenCV_DIR=C:\tools\opencv\build" >> $GITHUB_ENV
 
     - name: Install MacOS Dependencies
       if: runner.os == 'macOS'
-      run: sudo port install opencv4
-
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      run: |
+        sudo port install opencv4
+        echo "OpenCV_DIR=/opt/local/lib/cmake/opencv4" >> $GITHUB_ENV
 
     - name: Configure project
       run: cmake -S . -B build ${{matrix.platform.flags}} ${{matrix.config.flags}} ${{matrix.build.flags}}
