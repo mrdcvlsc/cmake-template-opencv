@@ -50,7 +50,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Configure project
-      run: cmake -S src -B build ${{matrix.platform.flags}} ${{matrix.config.flags}} ${{matrix.build.flags}}
+      run: cmake -S . -B build ${{matrix.platform.flags}} ${{matrix.config.flags}} ${{matrix.build.flags}}
 
     - name: Build ${{matrix.platform.bin}} executable
       run: cmake --build build --config ${{matrix.build.name}}
