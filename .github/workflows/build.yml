@@ -50,8 +50,7 @@ jobs:
     - name: Install MacOS Dependencies
       if: runner.os == 'macOS'
       run: |
-        sudo port install opencv4
-        echo "OpenCV_DIR=/opt/local/lib/cmake/opencv4" >> $GITHUB_ENV
+        brew install opencv
 
     - name: Configure project
       run: cmake -S . -B build ${{matrix.platform.flags}} ${{matrix.config.flags}} ${{matrix.build.flags}}
