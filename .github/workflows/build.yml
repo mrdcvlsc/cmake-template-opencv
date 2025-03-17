@@ -45,11 +45,12 @@ jobs:
     - name: Install Windows Dependencies
       if: runner.os == 'Windows'
       run: |
-        curl -L -o opencv-4.11.0-windows.exe https://github.com/opencv/opencv/releases/download/4.11.0/opencv-4.11.0-windows.exe
-        ls
-        ./opencv-4.11.0-windows.exe /D=C:\opencv
-        ./opencv-4.11.0-windows.exe
-        tree opencv
+        curl -L -o 4.11.0.zip https://github.com/opencv/opencv/archive/refs/tags/4.11.0.zip
+        tar -xf "4.11.0.zip" -C ".\"
+        cd opencv-4.11.0
+        cmake -S . -B build ${{matrix.platform.flags}} ${{matrix.config.flags}} ${{matrix.build.flags}} -DBUILD_PERF_TESTS=OFF -DBUILD_TESTS=OFF -DBUILD_DOCS=OFF  -DWITH_CUDA=OFF -DBUILD_EXAMPLES=OFF -DINSTALL_CREATE_DISTRIB=ON
+        cmake --build build  --config release
+        cmake --build build  --target install --config release
 
     - name: Install MacOS Dependencies
       if: runner.os == 'macOS'
