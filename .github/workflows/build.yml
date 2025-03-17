@@ -42,14 +42,28 @@ jobs:
       if: runner.os == 'Linux'
       run: sudo apt install libopencv-dev
 
-    - name: Install Windows Dependencies
+    - name: Download OpenCV and Extract sources
       if: runner.os == 'Windows'
       run: |
         curl -L -o 4.11.0.zip https://github.com/opencv/opencv/archive/refs/tags/4.11.0.zip
         tar -xf "4.11.0.zip" -C ".\"
+       
+    - name: CMake Config OpenCV (Windows)
+      if: runner.os == 'Windows'
+      run: |
         cd opencv-4.11.0
         cmake -S . -B build ${{matrix.platform.flags}} ${{matrix.config.flags}} ${{matrix.build.flags}} -DBUILD_PERF_TESTS=OFF -DBUILD_TESTS=OFF -DBUILD_DOCS=OFF  -DWITH_CUDA=OFF -DBUILD_EXAMPLES=OFF -DINSTALL_CREATE_DISTRIB=ON
+
+    - name: CMake Build OpenCV (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        cd opencv-4.11.0
         cmake --build build  --config release
+
+    - name: CMake Install OpenCV (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        cd opencv-4.11.0
         cmake --build build  --target install --config release
 
     - name: Install MacOS Dependencies
