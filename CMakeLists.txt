@@ -38,14 +38,12 @@ if(NOT OpenCV_FOUND)
         GIT_PROGRESS TRUE
     )
     FetchContent_MakeAvailable(opencv)
-
-    find_package(opencv REQUIRED)
 endif()
 
 include_directories(${OpenCV_INCLUDE_DIRS})
 
 add_executable(live_cam live_cam.cpp)
-target_link_libraries(live_cam opencv_highgui opencv_imgcodecs opencv_core opencv_imgproc)
+# target_link_libraries(live_cam opencv_highgui opencv_imgcodecs opencv_core opencv_imgproc)
 
 # link all opencv library modules
-# target_link_libraries(live_cam ${OpenCV_LIBS})
+target_link_libraries(live_cam ${OpenCV_LIBS})
