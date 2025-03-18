@@ -17,10 +17,10 @@ jobs:
       fail-fast: false
       matrix:
         platform:
-        - { name: Windows VS2019, os: windows-2019,   folder: .\\build\\bin\\Release, zip: windows-VS19.zip,  zipper: 7z a -tzip, flags: -G "Visual Studio 16 2019" -A x64                                         -DCMAKE_INSTALL_PREFIX="opencv-4.11.0/build/install" }
-        - { name: Windows VS2022, os: windows-2022,   folder: .\\build\\bin\\Release, zip: windows-VS22.zip,  zipper: 7z a -tzip, flags: -G "Visual Studio 17 2022" -A x64                                         -DCMAKE_INSTALL_PREFIX="opencv-4.11.0/build/install" }
-        - { name: Windows Clang,  os: windows-latest, folder: .\\build\\bin\\Release, zip: windows-clang.zip, zipper: 7z a -tzip, flags: -G "Unix Makefiles" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_INSTALL_PREFIX="opencv-4.11.0/build/install" }
-        - { name: Windows GCC,    os: windows-latest, folder: .\\build\\bin\\Release, zip: windows-gcc.zip,   zipper: 7z a -tzip, flags: -G "Unix Makefiles" -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++       -DCMAKE_INSTALL_PREFIX="opencv-4.11.0/build/install" }
+        - { name: Windows VS2019, os: windows-2019,   folder: .\\build\\bin\\Release, zip: windows-VS19.zip,  zipper: 7z a -tzip, flags: -G "Visual Studio 16 2019" -A x64                                         -DCMAKE_INSTALL_PREFIX="build/install" }
+        - { name: Windows VS2022, os: windows-2022,   folder: .\\build\\bin\\Release, zip: windows-VS22.zip,  zipper: 7z a -tzip, flags: -G "Visual Studio 17 2022" -A x64                                         -DCMAKE_INSTALL_PREFIX="build/install" }
+        - { name: Windows Clang,  os: windows-latest, folder: .\\build\\bin\\Release, zip: windows-clang.zip, zipper: 7z a -tzip, flags: -G "Unix Makefiles" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_INSTALL_PREFIX="build/install" }
+        - { name: Windows GCC,    os: windows-latest, folder: .\\build\\bin\\Release, zip: windows-gcc.zip,   zipper: 7z a -tzip, flags: -G "Unix Makefiles" -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++       -DCMAKE_INSTALL_PREFIX="build/install" }
         - { name: MacOS XCode,    os: macos-latest,   folder: ./build/bin,            zip: mac.zip,           zipper: zip }
         - { name: Linux GCC,      os: ubuntu-latest,  folder: ./build/bin,            zip: ubuntu-gcc.zip,    zipper: zip -r }
         - { name: Linux Clang,    os: ubuntu-latest,  folder: ./build/bin,            zip: ubuntu-clang.zip,  zipper: zip -r,     flags: -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ }
@@ -66,12 +66,16 @@ jobs:
         cd opencv-4.11.0
         cmake --build build  --target install --config release
 
+    - name: Verify OpenCV Installation
+      if: runner.os == 'Windows'
+      run: dir opencv-4.11.0\build\install
+
     - name: Install MacOS Dependencies
       if: runner.os == 'macOS'
       run: brew install opencv
 
     - name: Configure project
-      run: cmake -S . -B build ${{matrix.platform.flags}} ${{matrix.config.flags}} ${{matrix.build.flags}}
+      run: cmake -S . -B build -DOpenCV_DIR=opencv-4.11.0/build/install/lib/cmake/opencv4 ${{matrix.platform.flags}} ${{matrix.config.flags}} ${{matrix.build.flags}}
 
     - name: Build ${{matrix.platform.bin}} executable
       run: cmake --build build --config ${{matrix.build.name}}
