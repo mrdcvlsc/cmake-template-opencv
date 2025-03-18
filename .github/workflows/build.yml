@@ -20,13 +20,13 @@ jobs:
         # - { name: Windows VS2022-shared, os: windows-2022,   folder: .\\build\\bin\\Release, zip: windows-VS22.zip,  zipper: 7z a -tzip, flags: -G "Visual Studio 17 2022" -A x64                                          -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreadedDLL" }
         - { name: Windows VS2019, os: windows-2019,   folder: .\\build\\bin\\Release, zip: windows-VS19.zip,  zipper: 7z a -tzip, flags: -G "Visual Studio 16 2019" -A x64                                          -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded" }
         - { name: Windows VS2022, os: windows-2022,   folder: .\\build\\bin\\Release, zip: windows-VS22.zip,  zipper: 7z a -tzip, flags: -G "Visual Studio 17 2022" -A x64                                          -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded" }
-        - { name: Windows Clang,  os: windows-latest, folder: .\\build\\bin\\Release, zip: windows-clang.zip, zipper: 7z a -tzip, flags: -G "Unix Makefiles" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ }
-        - { name: Windows GCC,    os: windows-latest, folder: .\\build\\bin\\Release, zip: windows-gcc.zip,   zipper: 7z a -tzip, flags: -G "Unix Makefiles" -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++       }
+        - { name: Windows Clang,  os: windows-latest, folder: .\\build\\bin,          zip: windows-clang.zip, zipper: 7z a -tzip, flags: -G "Unix Makefiles" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ }
+        - { name: Windows GCC,    os: windows-latest, folder: .\\build\\bin,          zip: windows-gcc.zip,   zipper: 7z a -tzip, flags: -G "Unix Makefiles" -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++       }
         - { name: MacOS XCode,    os: macos-latest,   folder: ./build/bin,            zip: mac.zip,           zipper: zip }
         - { name: Linux GCC,      os: ubuntu-latest,  folder: ./build/bin,            zip: ubuntu-gcc.zip,    zipper: zip -r }
         - { name: Linux Clang,    os: ubuntu-latest,  folder: ./build/bin,            zip: ubuntu-clang.zip,  zipper: zip -r,     flags: -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ }
         config:
-        - { name: static, flags: -DBUILD_SHARED_LIBS=OFF }
+        - { name: static, flags: -DBUILD_SHARED_LIBS=FALSE }
         # - { name: shared, flags: -DBUILD_SHARED_LIBS=TRUE }
         build:
         - { name: Release,        flags: -DCMAKE_BUILD_TYPE=Release }
