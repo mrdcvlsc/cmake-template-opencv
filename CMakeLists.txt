@@ -6,6 +6,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_CXX_STANDARD 17)
 
+message(STATUS "CPU_BASELINE : ${CPU_BASELINE}")
+message(STATUS "CPU_DISPATCH : ${CPU_DISPATCH}")
+
 if(MSVC)
     add_compile_options(
         $<$<CONFIG:Release>:/MT>
