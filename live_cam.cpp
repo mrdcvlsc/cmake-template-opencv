@@ -3,6 +3,12 @@
 #include <opencv2/core.hpp>
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
+
+#include <torch/csrc/jit/serialization/export.h>
+#include <torch/csrc/jit/frontend/tracer.h>
+#include <torch/script.h>
+#include <torch/torch.h>
 
 struct Camera
 {
@@ -12,8 +18,44 @@ struct Camera
     int height;
 };
 
+torch::Tensor preprocessFrame(cv::Mat &frame)
+{
+    cv::Mat img;
+
+    // Resize to match YOLO input size
+    cv::resize(frame, img, cv::Size(640, 640));
+
+    // Convert BGR (OpenCV default) to RGB
+    cv::cvtColor(img, img, cv::COLOR_BGR2RGB);
+
+    // Convert image to float32 and normalize to [0,1]
+    img.convertTo(img, CV_32F, 1.0 / 255.0);
+
+    // Convert OpenCV Mat to Torch Tensor
+    torch::Tensor tensor_image = torch::from_blob(img.data, {1, 640, 640, 3}, torch::kFloat32);
+
+    // Permute to match PyTorch format (C, H, W)
+    tensor_image = tensor_image.permute({0, 3, 1, 2});
+
+    return tensor_image.clone(); // Clone to ensure memory is properly managed
+}
+
 int main()
 {
+    // input shape : (1, 3, 640, 640)
+    torch::jit::script::Module model = torch::jit::load("yolo11n.torchscript");
+
+    torch::Device device(torch::kCPU);
+
+    if (torch::cuda::is_available()) {
+        device = torch::Device(torch::kCUDA);
+    } else if (torch::mps::is_available()) {
+        device = torch::Device(torch::kMPS);
+    }
+
+    model.to(device);
+    model.eval();
+
     // ===============================================================================
     //                               check available camera
     // ===============================================================================
@@ -73,18 +115,45 @@ int main()
     cv::VideoCapture cap(highest_resolution_camera.camera_index);
 
     if (!cap.isOpened()) {
+        std::cout << "not capturing\n";
         return -1;
+    } else {
+        // cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
+        // cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
+        // cap.set(cv::CAP_PROP_FPS, 45);
+        // cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
     }
 
     cv::namedWindow("highest resolution camera", cv::WINDOW_NORMAL);
     cv::Mat frame;
 
+    std::cout << "testing frame capture\n";
+
+    int empty_frames = 0;
+
+    for (int i = 0; i < 100; i++) {
+        cap >> frame;
+        empty_frames += static_cast<int>(frame.empty());
+    }
+
+    if (empty_frames > 0) {
+        std::cerr << "empty frames captured : " << empty_frames << "\n";
+        return 2;
+    }
+
+    std::cout << "video caputre started\n";
+
     while (true) {
         cap >> frame;
 
-        if (frame.empty()) {
-            break;
-        }
+        // Convert frame to tensor
+        torch::Tensor input_tensor = preprocessFrame(frame);
+
+        input_tensor = input_tensor.to(device);
+
+        torch::Tensor output = model.forward({input_tensor}).toTensor();
+
+        std::cout << "Inference done! Output shape: " << output.sizes() << std::endl;
 
         cv::imshow("highest resolution camera", frame);
 

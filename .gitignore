@@ -11,10 +11,13 @@ build
 *.nn
 *.tmp
 docs/*.mp4
-src/*.mp4
-src/*.jpg
-src/*.png
-src/*.jpeg
+*.mp4
+*.jpg
+*.png
+*.jpeg
+*.torchscript
+*.pt
+*.pth
 makefile
 
 # Prerequisites
