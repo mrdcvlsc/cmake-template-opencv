@@ -1,8 +1,8 @@
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <vector>
-#include <map>
 #include <algorithm>
 #include <string>
 #include <opencv2/core.hpp>
@@ -14,7 +14,7 @@
 #include <iomanip>
 #include <cmath>
 
-torch::Tensor preprocessFrame(cv::Mat &frame)
+torch::Tensor preprocess_frame(cv::Mat &frame)
 {
     cv::Mat img;
     cv::resize(frame, img, cv::Size(640, 640));
@@ -26,12 +26,12 @@ torch::Tensor preprocessFrame(cv::Mat &frame)
 }
 
 // Function to generate a unique color for each class ID
-cv::Scalar getColorForClass(int class_id)
+cv::Scalar get_class_color(int class_id)
 {
     // Use HSV color space where Hue varies by class ID
-    float   hue = std::fmod(class_id * 137.0f, 360.0f); // 137 is a prime number for good distribution
+    float   hue = std::fmod(class_id * 137.f, 360.f); // 137 is a prime number for good distribution
     cv::Mat hsv(1, 1, CV_32FC3);
-    hsv.at<cv::Vec3f>(0, 0) = cv::Vec3f(hue, 1.0f, 1.0f); // Full saturation and value
+    hsv.at<cv::Vec3f>(0, 0) = cv::Vec3f(hue, 1.f, 1.f); // Full saturation and value
     cv::Mat bgr;
     cv::cvtColor(hsv, bgr, cv::COLOR_HSV2BGR);
     cv::Vec3f color = bgr.at<cv::Vec3f>(0, 0);
@@ -40,7 +40,7 @@ cv::Scalar getColorForClass(int class_id)
 
 int main(int argc, char **argv)
 {
-    const std::string class_names[80] = {
+    const std::string coco80_class[80] = {
       "person",         "bicycle",    "car",           "motorcycle",    "airplane",     "bus",           "train",
       "truck",          "boat",       "traffic light", "fire hydrant",  "stop sign",    "parking meter", "bench",
       "bird",           "cat",        "dog",           "horse",         "sheep",        "cow",           "elephant",
@@ -63,58 +63,59 @@ int main(int argc, char **argv)
 
     char *err_ptr;
 
-    // Higher value will produce less detected objects due to higher detection passing rate
+    // higher value will produce less detected objects due to higher detection passing rate
     float confidence_threshold = std::strtof(argv[1], &err_ptr);
-    
-    if (*err_ptr == '\0') {
-        printf("%.2f\n", confidence_threshold);
-    } else {
-        puts("`arg1' is not a number!");
+
+    if (*err_ptr != '\0') {
+        std::cerr << "invalid argument 1 (confidence threshold) value, not a number\n";
         return 1;
     }
 
-    // Higher value will produce more detected objects but can increase detection redundancy
-    float non_max_suppression_threshold = std::strtof(argv[2], &err_ptr);
-    
-    if (*err_ptr == '\0') {
-        printf("%.2f\n", non_max_suppression_threshold);
-    } else {
-        puts("`arg2' is not a number!");
+    // non-max suppression threshold - higher value will produce more detected objects but can increase detection
+    // redundancy
+    float nms_threshold = std::strtof(argv[2], &err_ptr);
+
+    if (*err_ptr != '\0') {
+        std::cerr << "invalid argument 2 (NMS threshold) value, not a number\n";
         return 1;
     }
+
+    printf("confidence threshold          : %.2f\n", confidence_threshold);
+    printf("non-max suppression threshold : %.2f\n", nms_threshold);
 
     std::string input_path = argv[3];
     std::string output_path = argv[4];
 
-    cv::Mat original_image = cv::imread(input_path);
-    if (original_image.empty()) {
-        std::cerr << "Could not read image from " << input_path << "\n";
+    cv::Mat origin_img = cv::imread(input_path);
+    if (origin_img.empty()) {
+        std::cerr << "could not read image from " << input_path << "\n";
         return 1;
     }
 
-    int original_width = original_image.cols;
-    int original_height = original_image.rows;
+    int origin_w = origin_img.cols;
+    int origin_h = origin_img.rows;
 
-    torch::Tensor input_tensor = preprocessFrame(original_image);
+    torch::Tensor input_tensor = preprocess_frame(origin_img);
 
     torch::jit::script::Module model;
     try {
         model = torch::jit::load("yolo11n.torchscript");
     }
     catch (const c10::Error &e) {
-        std::cerr << "Error loading the model: " << e.what() << std::endl;
+        std::cerr << "Error loading the model: " << e.what() << '\n';
         return 1;
     }
 
     torch::Device device(torch::kCPU);
+
     if (torch::cuda::is_available()) {
         device = torch::Device(torch::kCUDA);
-        std::cout << "Using CUDA device" << std::endl;
+        std::cout << "using device                  : CUDA" << '\n';
     } else if (torch::mps::is_available()) {
         device = torch::Device(torch::kMPS);
-        std::cout << "Using MPS device" << std::endl;
+        std::cout << "using device                  : MPS" << '\n';
     } else {
-        std::cout << "Using CPU device" << std::endl;
+        std::cout << "using device                  : CPU" << '\n';
     }
 
     model.to(device);
@@ -126,111 +127,127 @@ int main(int argc, char **argv)
         output = model.forward({input_tensor.to(device)}).toTensor().to(torch::kCPU);
     }
     catch (const c10::Error &e) {
-        std::cerr << "Error during inference: " << e.what() << std::endl;
+        std::cerr << "error during inference: " << e.what() << '\n';
         return 1;
     }
 
-    std::cout << "Output tensor shape: " << output.sizes() << std::endl;
+    std::cout << "output tensor shape: " << output.sizes() << '\n'; // [1, 84, 8400]
 
-    if (output.dim() == 3 && output.size(0) == 1 && output.size(1) == 84 && output.size(2) == 8400) {
-        output = output.squeeze(0).transpose(0, 1);
-        std::cout << "Transposed output shape: " << output.sizes() << std::endl;
-    }
+    auto start = std::chrono::system_clock::now();
+    output = output.squeeze(0).transpose(0, 1); // squeeze -> [84,  8400], transpose -> [8400, 84]    // 123911ns
+    auto end = std::chrono::system_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
 
-    std::vector<cv::Rect> boxes;
-    std::vector<float>    scores;
+    std::cout << "duration = " << duration.count() << '\n';
+    std::cout << "transposed output shape: " << output.sizes() << '\n'; // [8400, 84]
+
+    std::vector<cv::Rect> origin_bounding_boxes;
+    std::vector<float>    confidence_scores;
     std::vector<int>      class_ids;
-    const float           input_width = 640.0f;
-    const float           input_height = 640.0f;
 
-    int num_detections = output.size(0);
-    std::cout << "Processing " << num_detections << " potential detections" << std::endl;
+    const float input_w = 640.f;
+    const float input_h = 640.f;
+
+    int num_detections = output.size(0); // 8400
+
+    std::cout << "processing " << num_detections << " potential detections" << '\n';
 
     for (int i = 0; i < num_detections; ++i) {
         auto class_scores = output[i].slice(0, 4, 84);
-        auto [max_score, max_idx] = torch::max(class_scores, 0);
+        auto [max_score, max_index] = torch::max(class_scores, 0);
+
         float confidence = max_score.item<float>();
 
         if (confidence >= confidence_threshold) {
-            int class_id = max_idx.item<int>();
+            int class_id = max_index.item<int>();
 
-            float center_x = output[i][0].item<float>();
-            float center_y = output[i][1].item<float>();
-            float width = output[i][2].item<float>();
-            float height = output[i][3].item<float>();
+            // bounding box coordinates on the model's input image
 
-            std::cout << "Raw coords: " << center_x << ", " << center_y << ", " << width << ", " << height << std::endl;
+            float bb_output_center_x = output[i][0].item<float>();
+            float bb_output_center_y = output[i][1].item<float>();
+            float bb_output_w = output[i][2].item<float>();
+            float bb_output_h = output[i][3].item<float>();
 
-            float x = (center_x / input_width) * original_width;
-            float y = (center_y / input_height) * original_height;
-            float w = (width / input_width) * original_width;
-            float h = (height / input_height) * original_height;
+            // converted bounding box coordinates on the original image
 
-            float left = x - w / 2;
-            float top = y - h / 2;
+            float bb_origin_center_x = (bb_output_center_x / input_w) * origin_w;
+            float bb_origin_center_y = (bb_output_center_y / input_h) * origin_h;
 
-            left = std::max(0.0f, left);
-            top = std::max(0.0f, top);
-            w = std::min(w, static_cast<float>(original_width - left));
-            h = std::min(h, static_cast<float>(original_height - top));
+            float bb_origin_w = (bb_output_w / input_w) * origin_w;
+            float bb_origin_h = (bb_output_h / input_h) * origin_h;
 
-            cv::Rect box(static_cast<int>(left), static_cast<int>(top), static_cast<int>(w), static_cast<int>(h));
+            float bb_origin_left = std::max(0.f, bb_origin_center_x - bb_origin_w / 2.f);
+            float bb_origin_top = std::max(0.f, bb_origin_center_y - bb_origin_h / 2.f);
 
-            boxes.push_back(box);
-            scores.push_back(confidence);
+            cv::Rect origin_bounding_box(
+              static_cast<int>(bb_origin_left), static_cast<int>(bb_origin_top), static_cast<int>(bb_origin_w),
+              static_cast<int>(bb_origin_h)
+            );
+
+            origin_bounding_boxes.push_back(origin_bounding_box);
+            confidence_scores.push_back(confidence);
             class_ids.push_back(class_id);
-
-            std::cout << "Detection: class=" << class_id << " (" << class_names[class_id] << "), conf=" << std::fixed
-                      << std::setprecision(2) << confidence << std::endl;
         }
     }
 
-    std::vector<int> indices;
-    cv::dnn::NMSBoxes(boxes, scores, confidence_threshold, non_max_suppression_threshold, indices);
+    std::vector<int> final_detection_indices;
 
-    std::cout << "After NMS: " << indices.size() << " detections" << std::endl;
+    // remove duplicates
+    cv::dnn::NMSBoxes(
+      origin_bounding_boxes, confidence_scores, confidence_threshold, nms_threshold, final_detection_indices
+    );
 
-    for (int idx: indices) {
-        cv::Rect box = boxes[idx];
-        int      class_id = class_ids[idx];
-        float    score = scores[idx];
+    std::cout << "after NMS: " << final_detection_indices.size() << " detections" << '\n';
 
-        // Get unique color for this class
-        cv::Scalar color = getColorForClass(class_id);
+    std::string label;
+    label.reserve(50);
 
-        // Draw bounding box with class-specific color
-        cv::rectangle(original_image, box, color, 2);
+    for (int i: final_detection_indices) {
+        cv::Rect origin_bounding_box = origin_bounding_boxes[i];
+        float    confidence = confidence_scores[i];
+        int      class_id = class_ids[i];
+
+        cv::Scalar color = get_class_color(class_id);
+
+        // draw bounding box with class-specific color
+
+        cv::rectangle(origin_img, origin_bounding_box, color, 2);
 
         std::stringstream ss;
-        ss << std::fixed << std::setprecision(2) << score;
+        ss << std::fixed << std::setprecision(2) << confidence;
         std::string score_str = ss.str();
-        std::string label = class_names[class_id] + ": " + score_str;
+
+        label.append(coco80_class[class_id]);
+        label.append(": ");
+        label.append(ss.str());
 
         int      baseline = 0;
-        cv::Size text_size = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 2, &baseline);
+        cv::Size text_size = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
 
-        // Draw label background with the same class-specific color
+        // draw label background with the same class-specific color
+
         cv::rectangle(
-          original_image, cv::Point(box.x, box.y - text_size.height - 5), cv::Point(box.x + text_size.width, box.y),
-          color, -1
+          origin_img, cv::Point(origin_bounding_box.x, origin_bounding_box.y - text_size.height - 5),
+          cv::Point(origin_bounding_box.x + text_size.width, origin_bounding_box.y), color, -1
         );
 
-        // Draw text in black for contrast
+        // draw text in black for contrast
+
         cv::putText(
-          original_image, label, cv::Point(box.x, box.y - 5), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 2
+          origin_img, label, cv::Point(origin_bounding_box.x, origin_bounding_box.y - 5), cv::FONT_HERSHEY_SIMPLEX, 0.5,
+          cv::Scalar(0, 0, 0), 2
         );
 
-        std::cout << "Drew box for " << label << " at " << box.x << "," << box.y << " size " << box.width << "x"
-                  << box.height << std::endl;
+        label.resize(0);
     }
 
-    if (!cv::imwrite(output_path, original_image)) {
-        std::cerr << "Failed to save output image to " << output_path << "\n";
+    if (!cv::imwrite(output_path, origin_img)) {
+        std::cerr << "failed to save output image to " << output_path << "\n";
         return 1;
     }
 
-    std::cout << "Output image saved to " << output_path << "\n";
-    std::cout << "Found " << indices.size() << " objects" << std::endl;
+    std::cout << "output image saved to " << output_path << "\n";
+    std::cout << "found " << final_detection_indices.size() << " objects" << '\n';
 
     return 0;
 }
