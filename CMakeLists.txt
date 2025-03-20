@@ -77,12 +77,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 # ------------------------------------------------------------------
 # live_cam
 
-add_executable(live_cam live_cam.cpp)
+add_executable(live_cam live_cam.cpp get_cameras.cpp preprocess_frame.cpp get_class_color.cpp)
 target_link_libraries(live_cam "${TORCH_LIBRARIES}")
-target_link_libraries(live_cam opencv_highgui opencv_imgcodecs opencv_core opencv_imgproc)
+# target_link_libraries(live_cam opencv_highgui opencv_imgcodecs opencv_core opencv_imgproc)
 
 # link all opencv library modules
-# target_link_libraries(live_cam ${OpenCV_LIBS})
+target_link_libraries(live_cam ${OpenCV_LIBS})
 
 if (MSVC)
 file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")
@@ -96,7 +96,7 @@ endif (MSVC)
 # ------------------------------------------------------------------
 # draw_bounding_box
 
-add_executable(draw_bounding_box draw_bounding_box.cpp)
+add_executable(draw_bounding_box draw_bounding_box.cpp preprocess_frame.cpp get_class_color.cpp)
 target_link_libraries(draw_bounding_box "${TORCH_LIBRARIES}")
 # target_link_libraries(draw_bounding_box opencv_highgui opencv_imgcodecs opencv_core opencv_imgproc)
 

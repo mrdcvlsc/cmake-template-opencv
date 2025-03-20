@@ -5,38 +5,18 @@
 #include <vector>
 #include <algorithm>
 #include <string>
+#include <iomanip>
+#include <cmath>
+
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/dnn.hpp>
 #include <torch/script.h>
 #include <torch/torch.h>
-#include <iomanip>
-#include <cmath>
 
-torch::Tensor preprocess_frame(cv::Mat &frame)
-{
-    cv::Mat img;
-    cv::resize(frame, img, cv::Size(640, 640));
-    cv::cvtColor(img, img, cv::COLOR_BGR2RGB);
-    img.convertTo(img, CV_32F, 1.0 / 255.0);
-    torch::Tensor tensor_image = torch::from_blob(img.data, {1, 640, 640, 3}, torch::kFloat32);
-    tensor_image = tensor_image.permute({0, 3, 1, 2});
-    return tensor_image.clone();
-}
-
-// Function to generate a unique color for each class ID
-cv::Scalar get_class_color(int class_id)
-{
-    // Use HSV color space where Hue varies by class ID
-    float   hue = std::fmod(class_id * 137.f, 360.f); // 137 is a prime number for good distribution
-    cv::Mat hsv(1, 1, CV_32FC3);
-    hsv.at<cv::Vec3f>(0, 0) = cv::Vec3f(hue, 1.f, 1.f); // Full saturation and value
-    cv::Mat bgr;
-    cv::cvtColor(hsv, bgr, cv::COLOR_HSV2BGR);
-    cv::Vec3f color = bgr.at<cv::Vec3f>(0, 0);
-    return cv::Scalar(color[0] * 255, color[1] * 255, color[2] * 255);
-}
+#include "preprocess_frame.hpp"
+#include "get_class_color.hpp"
 
 int main(int argc, char **argv)
 {
@@ -54,6 +34,8 @@ int main(int argc, char **argv)
       "toaster",        "sink",       "refrigerator",  "book",          "clock",        "vase",          "scissors",
       "teddy bear",     "hair drier", "toothbrush"
     };
+
+    // ===============================================================================
 
     if (argc < 1 + 4) {
         std::cerr << "Usage: " << argv[0]
@@ -133,12 +115,8 @@ int main(int argc, char **argv)
 
     std::cout << "output tensor shape: " << output.sizes() << '\n'; // [1, 84, 8400]
 
-    auto start = std::chrono::system_clock::now();
     output = output.squeeze(0).transpose(0, 1); // squeeze -> [84,  8400], transpose -> [8400, 84]    // 123911ns
-    auto end = std::chrono::system_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
 
-    std::cout << "duration = " << duration.count() << '\n';
     std::cout << "transposed output shape: " << output.sizes() << '\n'; // [8400, 84]
 
     std::vector<cv::Rect> origin_bounding_boxes;
@@ -151,6 +129,8 @@ int main(int argc, char **argv)
     int num_detections = output.size(0); // 8400
 
     std::cout << "processing " << num_detections << " potential detections" << '\n';
+
+    auto start = std::chrono::system_clock::now();
 
     for (int i = 0; i < num_detections; ++i) {
         auto class_scores = output[i].slice(0, 4, 84);
@@ -190,9 +170,14 @@ int main(int argc, char **argv)
         }
     }
 
+    auto end = std::chrono::system_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+
+    std::cout << "duration = " << duration.count() << '\n';
+
     std::vector<int> final_detection_indices;
 
-    // remove duplicates
+    // remove duplicates bounding boxes
     cv::dnn::NMSBoxes(
       origin_bounding_boxes, confidence_scores, confidence_threshold, nms_threshold, final_detection_indices
     );
