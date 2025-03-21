@@ -1,28 +1,60 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.28)
 
-project(opencv_template_demo)
+project(sfml_opencv_libtorch_project)
+
+message(STATUS "BUILD_SHARED_LIBS=${BUILD_SHARED_LIBS}")
+message(STATUS "CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
+message(STATUS "CPU_BASELINE : ${CPU_BASELINE}")
+message(STATUS "CPU_DISPATCH : ${CPU_DISPATCH}")
+
+# ------------------------------------------------------------------
+# INITIAL SETUPS
+# ------------------------------------------------------------------
+
+if(MSVC)
+    if(BUILD_SHARED_LIBS)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+    else()
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+    endif()
+
+    message(STATUS "CMAKE_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}")
+
+    add_compile_options(
+        $<$<CONFIG:Release>:/MT>
+        $<$<CONFIG:Debug>:/MTd>
+    )
+
+    message(STATUS "CONFIG=${CONFIG}")
+endif()
+
+# ------------------------------------------------------------------
+# SFML
+# ------------------------------------------------------------------
+
+include(FetchContent)
+FetchContent_Declare(SFML
+    GIT_REPOSITORY https://github.com/SFML/SFML.git
+    GIT_TAG 3.0.0
+    GIT_SHALLOW ON
+    EXCLUDE_FROM_ALL
+    SYSTEM)
+FetchContent_MakeAvailable(SFML)
+
+# ------------------------------------------------------------------
+# OpenCV
+# ------------------------------------------------------------------
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_CXX_STANDARD 17)
 
-message(STATUS "CPU_BASELINE : ${CPU_BASELINE}")
-message(STATUS "CPU_DISPATCH : ${CPU_DISPATCH}")
-
-if(MSVC)
-    add_compile_options(
-        $<$<CONFIG:Release>:/MT>
-        $<$<CONFIG:Debug>:/MTd>
-    )
-endif()
-
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 
-
-
 # ------------------------------------------------------------------
-
+# LIBTORCH
+# ------------------------------------------------------------------
 
 include(FetchContent)
 
@@ -78,11 +110,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 # live_cam_object_detection (OpenCV + libtorch)
 
 add_executable(live_cam_object_detection live_cam_object_detection.cpp get_cameras.cpp event_keys.cpp preprocess_frame.cpp get_class_color.cpp logger.cpp)
-target_link_libraries(live_cam_object_detection "${TORCH_LIBRARIES}")
-# target_link_libraries(live_cam_object_detection opencv_highgui opencv_imgcodecs opencv_core opencv_imgproc)
+target_link_libraries(live_cam_object_detection PRIVATE "${TORCH_LIBRARIES}")
+# target_link_libraries(live_cam_object_detection PRIVATE opencv_highgui opencv_imgcodecs opencv_core opencv_imgproc)
 
 # link all opencv library modules
-target_link_libraries(live_cam_object_detection ${OpenCV_LIBS})
+target_link_libraries(live_cam_object_detection PRIVATE ${OpenCV_LIBS})
+target_link_libraries(live_cam_object_detection PRIVATE SFML::Audio)
 
 if (MSVC)
 file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")
@@ -97,11 +130,12 @@ endif (MSVC)
 # live_cam_motion_detection (OpenCV only)
 
 add_executable(live_cam_motion_detection live_cam_motion_detection.cpp get_cameras.cpp event_keys.cpp logger.cpp)
-# target_link_libraries(live_cam_motion_detection "${TORCH_LIBRARIES}")
-target_link_libraries(live_cam_motion_detection opencv_highgui opencv_imgcodecs opencv_core opencv_imgproc)
+# target_link_libraries(live_cam_motion_detection PRIVATE "${TORCH_LIBRARIES}")
+# target_link_libraries(live_cam_motion_detection PRIVATE opencv_highgui opencv_imgcodecs opencv_core opencv_imgproc)
 
 # link all opencv library modules
-target_link_libraries(live_cam_motion_detection ${OpenCV_LIBS})
+target_link_libraries(live_cam_motion_detection PRIVATE ${OpenCV_LIBS})
+target_link_libraries(live_cam_motion_detection PRIVATE SFML::Audio)
 
 # if (MSVC)
 # file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")
@@ -117,11 +151,11 @@ target_link_libraries(live_cam_motion_detection ${OpenCV_LIBS})
 # draw_bounding_box (OpenCV + libtorch)
 
 add_executable(draw_bounding_box draw_bounding_box.cpp preprocess_frame.cpp get_class_color.cpp event_keys.cpp logger.cpp)
-target_link_libraries(draw_bounding_box "${TORCH_LIBRARIES}")
-# target_link_libraries(draw_bounding_box opencv_highgui opencv_imgcodecs opencv_core opencv_imgproc)
+target_link_libraries(draw_bounding_box PRIVATE "${TORCH_LIBRARIES}")
+# target_link_libraries(draw_bounding_box PRIVATE opencv_highgui opencv_imgcodecs opencv_core opencv_imgproc)
 
 # link all opencv library modules
-target_link_libraries(draw_bounding_box ${OpenCV_LIBS})
+target_link_libraries(draw_bounding_box PRIVATE ${OpenCV_LIBS})
 
 if (MSVC)
 file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")

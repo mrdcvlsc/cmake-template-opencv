@@ -8,6 +8,8 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/bgsegm.hpp>
 
+#include <SFML/Audio.hpp>
+
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -98,6 +100,11 @@ int main(int argc, char **argv)
 
     bool is_enable_action = false;
 
+    sf::SoundBuffer sound_buffer("alert.wav");
+    sf::Sound       alert_sound(sound_buffer);
+
+    alert_sound.play();
+
     while (true) {
         double current_time = static_cast<double>(cv::getTickCount());
         double time_elapsed = (current_time - previous_time) / cv::getTickFrequency();
@@ -135,10 +142,14 @@ int main(int argc, char **argv)
         }
 
         if (motion_detected) {
+            if (alert_sound.getStatus() != sf::Sound::Status::Playing) {
+                alert_sound.play();
+            }
+
             debug_log("motion detected");
 
             std::string motion_frame_img = get_timestamp() + ".jpg";
-            
+
             if (!cv::imwrite(motion_frame_img, frame)) {
                 std::cerr << "failed to save output image to " << motion_frame_img << "\n";
                 return 1;
