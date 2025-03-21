@@ -18,6 +18,7 @@
 #include "preprocess_frame.hpp"
 #include "get_class_color.hpp"
 #include "get_cameras.hpp"
+#include "event_keys.hpp"
 
 std::vector<cv::Rect> origin_bounding_boxes;
 std::vector<float>    confidence_scores;
@@ -31,6 +32,13 @@ int main(int argc, char **argv)
                      "[torch-script-jit-model] [model-input-dimension-size]\n";
         return 1;
     }
+
+    std::cout << "key controls:\n"
+              << "q, Q, Esc  =  close live camera capture (close program).\n"
+                 "c, C       =  toggle (on/off) actions for detections ('off' by default).\n"
+                 "[          =  switch to previous camera.\n"
+                 "]          =  switch to next camera.\n"
+              << "\n";
 
     char *err_ptr;
 
@@ -154,6 +162,8 @@ int main(int argc, char **argv)
     class_ids.reserve(8400 + 1);
     final_detection_indices.reserve(8400 + 1);
     label.reserve(50);
+
+    bool is_enable_action = false;
 
     while (true) {
         auto start = std::chrono::system_clock::now();
@@ -325,43 +335,10 @@ int main(int argc, char **argv)
 
         int key = cv::waitKey(1);
 
-        if (key == 'q' || key == 'Q' || key == 27) { // 'q' or 'ESC' to exit
-            std::cout << "close exit through key\n";
+        bool is_stop = check_events(key, cap, available_cameras, current_camera_index, is_enable_action);
+
+        if (is_stop) {
             break;
-        }
-
-        if (key == '[') { // previous camera
-            if (current_camera_index > 0) {
-                current_camera_index--;
-            } else {
-                current_camera_index = available_cameras.size() - 1; // Loop back to last camera
-            }
-
-            cap.release();
-            cap.open(available_cameras[current_camera_index].camera_index);
-
-            if (!cap.isOpened()) {
-                std::cerr << "Failed to open camera index " << current_camera_index << "\n";
-            } else {
-                std::cout << "Switched to camera index " << current_camera_index << "\n";
-            }
-        }
-
-        if (key == ']') { // next camera
-            if (current_camera_index < available_cameras.size() - 1) {
-                current_camera_index++;
-            } else {
-                current_camera_index = 0;
-            }
-
-            cap.release();
-            cap.open(available_cameras[current_camera_index].camera_index);
-
-            if (!cap.isOpened()) {
-                std::cerr << "Failed to open camera index " << current_camera_index << "\n";
-            } else {
-                std::cout << "Switched to camera index " << current_camera_index << "\n";
-            }
         }
     }
 
