@@ -1,3 +1,5 @@
+#include <ATen/ATen.h>
+#include <ATen/Parallel.h>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -6,6 +8,7 @@
 #include <algorithm>
 #include <string>
 #include <iomanip>
+#include <filesystem>
 #include <cmath>
 
 #include <opencv2/core.hpp>
@@ -17,6 +20,7 @@
 
 #include "preprocess_frame.hpp"
 #include "get_class_color.hpp"
+#include "torch/types.h"
 
 int main(int argc, char **argv)
 {
@@ -37,9 +41,11 @@ int main(int argc, char **argv)
 
     // ===============================================================================
 
-    if (argc < 1 + 4) {
+    if (argc < 1 + 6) {
         std::cerr << "Usage: " << argv[0]
-                  << "<confidence-threshold> <non-max-suppression-threshold> <input_image> <output_image>\n";
+                  << "[confidence-threshold] [non-max-suppression-threshold] "
+                     "[torch-script-jit-model] [model-input-dimension-size] "
+                     "[input-image] [output-image]\n";
         return 1;
     }
 
@@ -62,26 +68,57 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    printf("confidence threshold          : %.2f\n", confidence_threshold);
-    printf("non-max suppression threshold : %.2f\n", nms_threshold);
+    std::string model_path = argv[3];
+    if (!std::filesystem::exists(model_path)) {
+        std::cerr << "invalid argument 3, file not found (model: '" << model_path << "')\n";
+        return 1;
+    }
 
-    std::string input_path = argv[3];
-    std::string output_path = argv[4];
+    // model_input_dim_size x model_input_dim_size
+    float model_input_dim_size = std::strtof(argv[4], &err_ptr);
 
-    cv::Mat origin_img = cv::imread(input_path);
+    if (*err_ptr != '\0') {
+        std::cerr << "invalid argument 4 (model_input_dim_size) value, not a number\n";
+        return 1;
+    }
+
+    std::string input_img_path = argv[5];
+    if (!std::filesystem::exists(input_img_path)) {
+        std::cerr << "invalid argument 5, file not found (input-img-path: '" << input_img_path << "')\n";
+        return 1;
+    }
+
+    std::string output_img_path = argv[6];
+
+    printf("confidence-threshold          : %.2f\n", confidence_threshold);
+    printf("non-max-suppression-threshold : %.2f\n", nms_threshold);
+    printf("torch-script-jit-model        : %s\n", model_path.c_str());
+    printf("model-input-dimension-size    : %.2f\n", model_input_dim_size);
+    printf("input-img-path                : %s\n", input_img_path.c_str());
+    printf("output-img-path               : %s\n\n", output_img_path.c_str());
+
+    printf("num_interop_threads : %d\n", torch::get_num_interop_threads());
+    printf("num_threads         : %d\n", torch::get_num_threads());
+    printf("cpu_capability      : %s\n\n", torch::get_cpu_capability().c_str());
+
+    cv::Mat origin_img = cv::imread(input_img_path);
     if (origin_img.empty()) {
-        std::cerr << "could not read image from " << input_path << "\n";
+        std::cerr << "could not read image from " << input_img_path << "\n";
         return 1;
     }
 
     int origin_w = origin_img.cols;
     int origin_h = origin_img.rows;
 
-    torch::Tensor input_tensor = preprocess_frame(origin_img);
+    const float input_w = model_input_dim_size;
+    const float input_h = model_input_dim_size;
+
+    torch::Tensor input_tensor =
+      preprocess_frame(origin_img, static_cast<int>(input_w), static_cast<int>(input_h), torch::kFloat32);
 
     torch::jit::script::Module model;
     try {
-        model = torch::jit::load("yolo11n.torchscript");
+        model = torch::jit::load(model_path);
     }
     catch (const c10::Error &e) {
         std::cerr << "Error loading the model: " << e.what() << '\n';
@@ -122,9 +159,6 @@ int main(int argc, char **argv)
     std::vector<cv::Rect> origin_bounding_boxes;
     std::vector<float>    confidence_scores;
     std::vector<int>      class_ids;
-
-    const float input_w = 640.f;
-    const float input_h = 640.f;
 
     int num_detections = output.size(0); // 8400
 
@@ -226,12 +260,12 @@ int main(int argc, char **argv)
         label.resize(0);
     }
 
-    if (!cv::imwrite(output_path, origin_img)) {
-        std::cerr << "failed to save output image to " << output_path << "\n";
+    if (!cv::imwrite(output_img_path, origin_img)) {
+        std::cerr << "failed to save output image to " << output_img_path << "\n";
         return 1;
     }
 
-    std::cout << "output image saved to " << output_path << "\n";
+    std::cout << "output image saved to " << output_img_path << "\n";
     std::cout << "found " << final_detection_indices.size() << " objects" << '\n';
 
     return 0;

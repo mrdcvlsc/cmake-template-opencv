@@ -1,3 +1,6 @@
+#include <chrono>
+#include <cstdlib>
+#include <filesystem>
 #include <iostream>
 
 #include <opencv2/core.hpp>
@@ -16,11 +19,16 @@
 #include "get_class_color.hpp"
 #include "get_cameras.hpp"
 
+std::vector<cv::Rect> origin_bounding_boxes;
+std::vector<float>    confidence_scores;
+std::vector<int>      class_ids;
+
 int main(int argc, char **argv)
 {
-    if (argc < 1 + 2) {
+    if (argc < 1 + 4) {
         std::cerr << "Usage: " << argv[0]
-                  << "<confidence-threshold> <non-max-suppression-threshold>\n";
+                  << "[confidence-threshold] [non-max-suppression-threshold] "
+                     "[torch-script-jit-model] [model-input-dimension-size]\n";
         return 1;
     }
 
@@ -43,8 +51,28 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    printf("confidence threshold          : %.2f\n", confidence_threshold);
-    printf("non-max suppression threshold : %.2f\n", nms_threshold);
+    std::string model_path = argv[3];
+    if (!std::filesystem::exists(model_path)) {
+        std::cerr << "invalid argument 3, file not found (model: '" << model_path << "')\n";
+        return 1;
+    }
+
+    // model_input_dim_size x model_input_dim_size
+    float model_input_dim_size = std::strtof(argv[4], &err_ptr);
+
+    if (*err_ptr != '\0') {
+        std::cerr << "invalid argument 4 (model_input_dim_size) value, not a number\n";
+        return 1;
+    }
+
+    printf("confidence-threshold          : %.2f\n", confidence_threshold);
+    printf("non-max-suppression-threshold : %.2f\n", nms_threshold);
+    printf("torch-script-jit-model        : %s\n", model_path.c_str());
+    printf("model-input-dimension-size    : %.2f\n\n", model_input_dim_size);
+
+    printf("num_interop_threads : %d\n", torch::get_num_interop_threads());
+    printf("num_threads         : %d\n", torch::get_num_threads());
+    printf("cpu_capability      : %s\n\n", torch::get_cpu_capability().c_str());
 
     // ===============================================================================
 
@@ -65,7 +93,7 @@ int main(int argc, char **argv)
 
     // ===============================================================================
 
-    torch::jit::script::Module model = torch::jit::load("yolo11n.torchscript");
+    torch::jit::script::Module model = torch::jit::load(model_path);
 
     torch::Device device(torch::kCPU);
 
@@ -118,11 +146,8 @@ int main(int argc, char **argv)
     double previous_time = static_cast<double>(cv::getTickCount());
     double fps = 0.0;
 
-    std::vector<cv::Rect> origin_bounding_boxes;
-    std::vector<float>    confidence_scores;
-    std::vector<int>      class_ids;
-    std::vector<int>      final_detection_indices;
-    std::string           label;
+    std::vector<int> final_detection_indices;
+    std::string      label;
 
     origin_bounding_boxes.reserve(8400 + 1);
     confidence_scores.reserve(8400 + 1);
@@ -131,6 +156,8 @@ int main(int argc, char **argv)
     label.reserve(50);
 
     while (true) {
+        auto start = std::chrono::system_clock::now();
+
         double current_time = static_cast<double>(cv::getTickCount());
         double time_elapsed = (current_time - previous_time) / cv::getTickFrequency();
 
@@ -146,20 +173,40 @@ int main(int argc, char **argv)
             throw std::runtime_error("detected an empty frame");
         }
 
+        auto end = std::chrono::system_clock::now();
+        auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        std::cout << "phase 1 : " << dur.count() << "ns\n";
+
         // ------------------------------------------------------
 
         int origin_w = frame.cols;
         int origin_h = frame.rows;
 
-        torch::Tensor input_tensor = preprocess_frame(frame);
-        torch::Tensor output = model.forward({input_tensor.to(device)}).toTensor().to(torch::kCPU);
-        output = output.squeeze(0).transpose(0, 1); // squeeze -> [84,  8400], transpose -> [8400, 84]    // 123911ns
+        const float input_w = model_input_dim_size;
+        const float input_h = model_input_dim_size;
 
-        const float input_w = 640.f;
-        const float input_h = 640.f;
+        start = std::chrono::system_clock::now();
+        torch::Tensor input_tensor =
+          preprocess_frame(frame, static_cast<int>(input_w), static_cast<int>(input_h), torch::kFloat32);
+        end = std::chrono::system_clock::now();
+        dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        std::cout << "pre-process : " << dur.count() << "ns\n";
+
+        start = std::chrono::system_clock::now();
+        torch::Tensor output = model.forward({input_tensor.to(device)}).toTensor().to(torch::kCPU);
+        end = std::chrono::system_clock::now();
+        dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        std::cout << "feed model : " << dur.count() << "ns\n";
+
+        start = std::chrono::system_clock::now();
+        output = output.squeeze(0).transpose(0, 1); // squeeze -> [84,  8400], transpose -> [8400, 84]    // 123911ns
+        end = std::chrono::system_clock::now();
+        dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        std::cout << "transpose output : " << dur.count() << "ns\n";
 
         int num_detections = output.size(0); // 8400
 
+        start = std::chrono::system_clock::now();
         for (int i = 0; i < num_detections; ++i) {
             auto class_scores = output[i].slice(0, 4, 84);
             auto [max_score, max_index] = torch::max(class_scores, 0);
@@ -197,14 +244,22 @@ int main(int argc, char **argv)
                 class_ids.push_back(class_id);
             }
         }
+        end = std::chrono::system_clock::now();
+        dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        std::cout << "get bounding boxes : " << dur.count() << "ns\n";
 
         std::vector<int> final_detection_indices;
 
+        start = std::chrono::system_clock::now();
         // remove duplicates bounding boxes
         cv::dnn::NMSBoxes(
           origin_bounding_boxes, confidence_scores, confidence_threshold, nms_threshold, final_detection_indices
         );
+        end = std::chrono::system_clock::now();
+        dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        std::cout << "non-max suppression : " << dur.count() << "ns\n";
 
+        start = std::chrono::system_clock::now();
         for (int i: final_detection_indices) {
             cv::Rect origin_bounding_box = origin_bounding_boxes[i];
             float    confidence = confidence_scores[i];
@@ -244,10 +299,19 @@ int main(int argc, char **argv)
             label.resize(0);
         }
 
+        end = std::chrono::system_clock::now();
+        dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        std::cout << "draw labels and bounding boxes : " << dur.count() << "ns\n";
+
+        start = std::chrono::system_clock::now();
         origin_bounding_boxes.resize(0);
         confidence_scores.resize(0);
         class_ids.resize(0);
         final_detection_indices.resize(0);
+
+        end = std::chrono::system_clock::now();
+        dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        std::cout << "clear resources : " << dur.count() << "ns\n";
 
         // ------------------------------------------------------
 

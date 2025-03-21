@@ -1,0 +1,39 @@
+------------------------------
+640x640 - model's input
+------------------------------
+
+1,215,433     ns : phase 1
+13,789,534    ns : pre-process
+1,599,076,517 ns : feed model
+59,926        ns : transpose output
+408,174,418   ns : get bounding boxes
+7,338         ns : non-max suppression
+6,447,859     ns : draw labels and bounding boxes
+100           ns : clear resources
+
+------------------------------
+320x320 - model's input
+------------------------------
+
+494,229     ns phase 1
+704,928,935 ns feed model
+57,288      ns transpose output
+104,912,258 ns get bounding boxes
+103,522,349 ns
+10,325      ns non-max suppression
+1,253,784   ns draw labels and bounding boxes
+125         ns clear resources
+
+------------------------------
+160x160 - model's input
+------------------------------
+1,996,072   ns : phase 1 
+276,334,094 ns : feed model
+39,088      ns : transpose output
+28,590,742  ns : get bounding boxes
+9,063       ns : non-max suppression
+610,490     ns : draw labels and bounding boxes
+125         ns : clear resources
+
+=================
+
